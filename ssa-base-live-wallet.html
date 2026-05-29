@@ -2645,5 +2645,169 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 </script>
 
+
+<script id="ssa-force-return-patch">
+/*
+  SSA Base Wallet Return Patch
+  Upload this file as: ssa-base-live-wallet.html
+  Live URL: https://jw8490.github.io/smart-ssa/ssa-base-live-wallet.html
+*/
+
+const SSA_RETURN_URL = "https://www.shopshareanywhere.com/wallet-return";
+const SSA_BASE_CHAIN_ID_RETURN = "0x2105";
+
+function ssaShortWallet(address) {
+  if (!address || address.length < 10) return address || "";
+  return address.slice(0, 6) + "..." + address.slice(-4);
+}
+
+function ssaReturnToApp(wallet) {
+  if (!wallet) {
+    alert("Wallet connected, but address was not found. Tap Connect Coinbase Wallet again.");
+    return;
+  }
+
+  localStorage.setItem("ssa_base_wallet", wallet);
+  localStorage.setItem("ssa_wallet_connected", "true");
+  localStorage.setItem("ssa_wallet_network", "Base");
+
+  const returnUrl =
+    SSA_RETURN_URL +
+    "?wallet=" + encodeURIComponent(wallet) +
+    "&network=base" +
+    "&status=connected" +
+    "&source=base-wallet";
+
+  window.location.assign(returnUrl);
+}
+
+async function ssaConnectAndReturn() {
+  try {
+    const provider = window.ethereum;
+
+    if (!provider) {
+      alert("Open this page inside the Base/Coinbase Wallet browser, then tap Connect Coinbase Wallet again.");
+      return;
+    }
+
+    const accounts = await provider.request({ method: "eth_requestAccounts" });
+
+    try {
+      await provider.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: SSA_BASE_CHAIN_ID_RETURN }]
+      });
+    } catch (switchError) {
+      if (switchError && switchError.code === 4902) {
+        await provider.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: SSA_BASE_CHAIN_ID_RETURN,
+            chainName: "Base",
+            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+            rpcUrls: ["https://mainnet.base.org"],
+            blockExplorerUrls: ["https://basescan.org"]
+          }]
+        });
+      }
+    }
+
+    const wallet = accounts && accounts[0] ? accounts[0] : "";
+    ssaReturnToApp(wallet);
+  } catch (err) {
+    console.error("SSA wallet connect failed:", err);
+    alert("Wallet approval did not complete. Try again inside the Base browser.");
+  }
+}
+
+function ssaAddReturnButton() {
+  const walletAddress =
+    localStorage.getItem("ssa_base_wallet") ||
+    localStorage.getItem("ssa_wallet") ||
+    "";
+
+  if (document.getElementById("ssa-return-app-button")) return;
+
+  const btn = document.createElement("button");
+  btn.id = "ssa-return-app-button";
+  btn.type = "button";
+  btn.innerHTML = "Return to Shop Share Anywhere";
+  btn.style.cssText = `
+    width: 100%;
+    margin-top: 14px;
+    padding: 16px;
+    border-radius: 18px;
+    background: #facc15;
+    color: #09090b;
+    font-weight: 900;
+    font-size: 16px;
+    border: 0;
+  `;
+  btn.onclick = async () => {
+    let wallet = walletAddress;
+
+    if (!wallet && window.ethereum) {
+      const accounts = await window.ethereum.request({ method: "eth_accounts" });
+      wallet = accounts && accounts[0] ? accounts[0] : "";
+    }
+
+    if (!wallet) {
+      await ssaConnectAndReturn();
+      return;
+    }
+
+    ssaReturnToApp(wallet);
+  };
+
+  const modalContent = document.getElementById("wallet-modal-content");
+  const walletModal = document.querySelector("#wallet-modal .modal");
+  const target = modalContent || walletModal || document.body;
+  target.appendChild(btn);
+}
+
+function ssaPatchConnectButtons() {
+  document.querySelectorAll("button, a").forEach((el) => {
+    const txt = (el.textContent || "").toLowerCase();
+
+    if (txt.includes("walletconnect") || txt.includes("open approval")) {
+      el.remove();
+      return;
+    }
+
+    if (txt.includes("connect coinbase wallet") || txt.includes("connect live wallet")) {
+      el.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        ssaConnectAndReturn();
+      };
+    }
+  });
+
+  ssaAddReturnButton();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  ssaPatchConnectButtons();
+
+  const observer = new MutationObserver(ssaPatchConnectButtons);
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  // If already connected inside Base browser, show return option immediately.
+  if (window.ethereum) {
+    setTimeout(async () => {
+      try {
+        const accounts = await window.ethereum.request({ method: "eth_accounts" });
+        if (accounts && accounts[0]) {
+          localStorage.setItem("ssa_base_wallet", accounts[0]);
+          ssaAddReturnButton();
+        }
+      } catch (e) {
+        console.log("SSA existing account check skipped.", e);
+      }
+    }, 800);
+  }
+});
+</script>
+
 </body>
 </html>
